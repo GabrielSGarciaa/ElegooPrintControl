@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SDCP Protocol Tester</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        #output { 
+            margin-top: 20px; 
+            padding: 10px; 
+            border: 1px solid #ccc; 
+            min-height: 300px;
+            font-family: monospace;
+            white-space: pre;
+            overflow-y: auto;
+        }
+        button { margin: 5px; padding: 5px 10px; }
+        .status { 
+            margin: 10px 0; 
+            padding: 5px; 
+            display: inline-block;
+            font-weight: bold;
+        }
+        .connected { color: green; }
+        .disconnected { color: red; }
+    </style>
+</head>
+<body>
+    <h1>SDCP Protocol Tester</h1>
+    <div>
+        <input type="text" id="wsUrl" value="ws://10.0.0.184:3030/websocket" style="width: 300px;">
+        <button onclick="connect()">Connect</button>
+        <span id="status" class="status disconnected">Disconnected</span>
+    </div>
+    
+    <div>
+        <h3>SDCP Commands:</h3>
+        <button onclick="sendCommand('status')">Get Status (Cmd: 0)</button>
+        <button onclick="sendCommand('attributes')">Get Attributes (Cmd: 1)</button>
+        <button onclick="sendCommand('file_list')">Get File List (Cmd: 258)</button>
+        <button onclick="sendCommand('history')">Get History (Cmd: 320)</button>
+    </div>
+    
+    <div>
+        <h3>Custom Command:</h3>
+        <input type="text" id="customCmd" value='{"Cmd":0,"Data":{}}' style="width: 400px;">
+        <button onclick="sendCustomCommand()">Send</button>
+    </div>
+    
+    <div id="output"></div>
+
+    <script>
+        let ws;
+        let requestId = 1;
+        const output = document.getElementById('output');
+        
+        function log(message) {
+            const timestamp = new Date().toISOString().substr(11, 8);
+            output.textContent += `[${timestamp}] ${message}\n`;
+            output.scrollTop = output.scrollHeight;
+            console.log(message);
+        }
+
+        function connect() {
+            const url = document.getElementById('wsUrl').value;
+            log(`Connecting to ${url}...`);
+            
+            if (ws) {
+                ws.close();
+            }
+            
+            ws = new WebSocket(url);
+            
+            ws.onopen = () => {
+                log('✅ Connected to WebSocket');
+                document.getElementById('status').className = 'status connected';
+                document.getElementById('status').textContent = 'Connected';
+                
+                // Subscribe to response topic
+                const subscribeMsg = {
+                    Id: "web-client",
+                    Data: {
+                        Cmd: 0,
+                        Data: {},
+                        RequestID: (requestId++).toString().padStart(16, '0'),
+                        MainboardID: "ffffffff",
+                        TimeStamp: Math.floor(Date.now() / 1000),
+                        From: 0
+                    },
+                    Topic: "sdcp/request/ffffffff"
+                };
+                
+                log('Subscribing to responses...');
+                ws.send(JSON.stringify(subscribeMsg));
+            };
+            
+            ws.onmessage = (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    log('📨 Received: ' + JSON.stringify(data, null, 2));
+                } catch (e) {
+                    log('📨 Received (raw): ' + e.data);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                log('❌ WebSocket error: ' + JSON.stringify(error));
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('status').textContent = 'Error - See console';
+            };
+            
+            ws.onclose = () => {
+                log('🔌 Disconnected from WebSocket');
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('status').textContent = 'Disconnected';
+            };
+        }
+
+        function sendCommand(cmd) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ Not connected to WebSocket');
+                return;
+            }
+            
+            let message = {
+                Id: "web-client",
+                Data: {
+                    Cmd: 0,  // Default to status command
+                    Data: {},
+                    RequestID: (requestId++).toString().padStart(16, '0'),
+                    MainboardID: "ffffffff",
+                    TimeStamp: Math.floor(Date.now() / 1000),
+                    From: 0
+                },
+                Topic: "sdcp/request/ffffffff"
+            };
+            
+            switch(cmd) {
+                case 'status':
+                    message.Data.Cmd = 0;  // Status request
+                    break;
+                case 'attributes':
+                    message.Data.Cmd = 1;  // Attributes request
+                    break;
+                case 'file_list':
+                    message.Data.Cmd = 258;  // File list request
+                    break;
+                case 'history':
+                    message.Data.Cmd = 320;  // History request
+                    break;
+            }
+            
+            log(`Sending ${cmd} command...`);
+            log(JSON.stringify(message, null, 2));
+            ws.send(JSON.stringify(message));
+        }
+
+        function sendCustomCommand() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('❌ Not connected to WebSocket');
+                return;
+            }
+            
+            try {
+                const customCmd = document.getElementById('customCmd').value;
+                const cmdData = JSON.parse(customCmd);
+                
+                const message = {
+                    Id: "web-client",
+                    Data: {
+                        ...cmdData,
+                        RequestID: (requestId++).toString().padStart(16, '0'),
+                        MainboardID: "ffffffff",
+                        TimeStamp: Math.floor(Date.now() / 1000),
+                        From: 0
+                    },
+                    Topic: "sdcp/request/ffffffff"
+                };
+                
+                log('Sending custom command:');
+                log(JSON.stringify(message, null, 2));
+                ws.send(JSON.stringify(message));
+            } catch (e) {
+                log('❌ Invalid JSON: ' + e.message);
+            }
+        }
+
+        // Make functions available in console
+        window.ws = ws;
+        window.sendCommand = sendCommand;
+        window.sendCustomCommand = sendCustomCommand;
+    </script>
+</body>
+</html>
