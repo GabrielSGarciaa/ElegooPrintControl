@@ -7,6 +7,8 @@ import { toast } from 'sonner';
 const statusMap = {
   // Printing states
   'printing': 'printing',
+  'preheating': 'printing',
+  'heating': 'printing',
   'exposing': 'printing',
   'dropping': 'printing',
   'lifting': 'printing',
@@ -49,6 +51,12 @@ export const PrinterControls: React.FC<PrinterControlsProps> = ({
   // Map the printer status to our UI states
   const uiStatus: UIStatus = statusMap[status as PrinterStatus] || 'idle';
 
+  // Debug logging
+  useEffect(() => {
+    console.log('[PrinterControls] Status prop changed:', status);
+    console.log('[PrinterControls] Mapped UI Status:', uiStatus);
+  }, [status, uiStatus]);
+
   // Reset loading state when status changes
   useEffect(() => {
     if (lastAction) {
@@ -58,23 +66,43 @@ export const PrinterControls: React.FC<PrinterControlsProps> = ({
   }, [status, lastAction]);
 
   const handleControl = async (action: ControlAction) => {
-    if (isLoading[action]) return;
+    console.log(`[handleControl] Action: ${action}, Current UI Status: ${uiStatus}, isLoading:`, isLoading);
     
+    if (isLoading[action]) {
+      console.log(`[handleControl] Action ${action} already in progress, ignoring`);
+      return;
+    }
+    
+    console.log(`[handleControl] Starting ${action} action`);
     setIsLoading(prev => ({ ...prev, [action]: true }));
     setLastAction(action);
     
     try {
+      console.log(`[handleControl] Calling onControl with action: ${action}`);
       const success = await onControl(action);
+      console.log(`[handleControl] onControl completed, success:`, success);
+      
       if (!success) {
-        toast.error(`Failed to ${action} print`);
+        const errorMsg = `Failed to ${action} print`;
+        console.error(`[handleControl] ${errorMsg}`);
+        toast.error(errorMsg);
       } else {
-        toast.success(`Print ${action}ed successfully`);
+        const successMsg = `Print ${action} command sent successfully`;
+        console.log(`[handleControl] ${successMsg}`);
+        toast.success(successMsg);
+        
+        // Add a small delay to allow the printer to process the command
+        // before we update the UI state
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     } catch (error) {
-      console.error(`Error ${action}ing print:`, error);
-      toast.error(`Error ${action}ing print: ${error.message}`);
+      const errorMsg = `Error ${action}ing print: ${error.message}`;
+      console.error(`[handleControl] ${errorMsg}`, error);
+      toast.error(errorMsg);
     } finally {
-      setIsLoading(prev => ({ ...prev, [action]: false }));
+      console.log(`[handleControl] Finishing ${action} action`);
+      // Don't reset loading state here - let the status update from the printer do that
+      // This prevents the UI from getting out of sync with the printer's actual state
     }
   };
 

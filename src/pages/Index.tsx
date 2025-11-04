@@ -11,7 +11,7 @@ import { Printer, Wifi, WifiOff } from 'lucide-react';
 import { usePrinter } from '../services/printerService';
 
 const Index = () => {
-  const [printerIP, setPrinterIP] = useState('10.0.0.184'); // Your printer's IP address
+  const [printerIP, setPrinterIP] = useState('10.205.117.244'); // Your printer's IP address
   
   // Use the printer service hook
   const {
